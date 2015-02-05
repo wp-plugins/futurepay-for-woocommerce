@@ -3,7 +3,7 @@
  * Plugin Name: FuturePay for WooCommerce
  * Plugin URI: https://www.futurepay.com
  * Description: Allow payment processing via FuturePay Gateway
- * Version: 1.0.7
+ * Version: 20150204
  * Author: FuturePay
  * Depends: WooCommerce
  */
@@ -158,7 +158,6 @@ function init_futurepay_woo_gateway() {
             add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
             add_action('futurepay_woo_valid_request', array($this, 'successful_request'), 10, 2);
             add_action( 'woocommerce_receipt_futurepay', array( $this, 'receipt_page' ) );
-            add_action( 'admin_notices', array( $this, 'futurepay_notices' ) );
             
             // enqueue stylesheet for signup/login forms
             wp_enqueue_style( 'futurepay-woo-styles', plugins_url('/assets/css/style.css', __FILE__) );
@@ -228,7 +227,7 @@ function init_futurepay_woo_gateway() {
             if (!in_array(get_woocommerce_currency(), $this->allowed_currencies)) {
                 return false;
             }
-            if (!in_array(WC()->countries->get_base_country(), $this->allowed_countries)) {
+            if (!in_array(WC()->customer->get_country(), $this->allowed_countries)) {
                 return false;
             }
             if (WC_Gateway_FuturePay::$credit_limit !== false
@@ -252,30 +251,9 @@ function init_futurepay_woo_gateway() {
         public function receipt_page($order_id)
         {
             $order = new WC_Order($order_id);
-            $order->update_status('on-hold', __( 'Waiting for customer to sign in to FuturePay', 'woocommerce' ));
             echo '<p>'.__('Thank you for your order, please fill out the form below to pay with FuturePay.', 'woocommerce').'</p>';
             echo $this->call_futurepay( $order_id );
         }
-        
-	/**
-	 *  Admin Notices for conditions under which FuturePay is available on a Shop
-	 */
-	public function futurepay_notices() {
-		if ( $this->get_option('enabled') != 'yes' ) return;
-
-		if ( ! in_array(get_woocommerce_currency(), $this->allowed_currencies )) {
-                    echo '<div class="error"><p>'.sprintf(__('The FuturePay gateway accepts payments in currencies of %s.  Your current currency is %s.  FuturePay won\'t work until you change the WooCommerce currency to an accepted one.','woocommerce'), implode( ', ', $this->allowed_currencies ), get_woocommerce_currency() ).'</p></div>';
-		}
-                
-		if (!in_array(WC()->countries->get_base_country(), $this->allowed_countries)) {
-                    $country_list = array();
-                    foreach ( $this->allowed_countries as $this_country ) {
-                        $country_list[] = WC()->countries->countries[$this_country];
-                    }
-                    echo '<div class="error"><p>'.sprintf(__('The FuturePay gateway is available to merchants from: %s.  Your country is: %s.  FuturePay won\'t work until you change the WooCommerce Shop Base country to an accepted one.  FuturePay is currently disabled on the Payment Gateways settings tab.','woocommerce'), implode( ', ', $country_list ), WC()->countries->get_base_country() ).'</p></div>';
-		}
-
-	}
         
         
 	public function futurepay_script() {
@@ -510,21 +488,22 @@ function init_futurepay_woo_gateway() {
                             $wc_logger->add('futurepay_request', "FuturePay: payment authorized for Order ID: " . $order->id);
                             $order->payment_complete();
                             
-                            // was: pay
-                            wp_safe_redirect(add_query_arg('key', $order->order_key, add_query_arg('order', $order_id, remove_query_arg('futurepay', get_permalink(wc_get_page_id('thankyou'))))));
+                            // this call was deprecated in woocommerce 2.1
+                            //wp_safe_redirect(add_query_arg('key', $order->order_key, add_query_arg('order', $order_id, remove_query_arg('futurepay', get_permalink(wc_get_page_id('thankyou'))))));
+                            wp_safe_redirect($order->get_checkout_order_received_url());
                             break;
 
                         case 'DECLINED':
-                            // Hold order
-                            $order->update_status('on-hold', sprintf(__('Payment %s via FuturePay.', 'woocommerce'), strtolower($response['OrderStatusCode'])));
+                            // Order failed
+                            $order->update_status('failed', sprintf(__('Payment %s via FuturePay.', 'woocommerce'), strtolower($response['OrderStatusCode'])));
                             $wc_logger = new WC_Logger();
                             $wc_logger->add('futurepay_request', "FUTUREPAY: declined order for Order ID: " . $order->id);
                             wc_add_notice("Payment Declined", "errors");
                             break;
 
                         default:
-                            // Hold order
-                            $order->update_status('on-hold', sprintf(__('Payment %s via FuturePay.', 'woocommerce'), strtolower($response['OrderStatusCode'])));
+                            // Order failed
+                            $order->update_status('failed', sprintf(__('Payment %s via FuturePay.', 'woocommerce'), strtolower($response['OrderStatusCode'])));
                             $wc_logger = new WC_Logger();
                             $wc_logger->add('futurepay_request', "FUTUREPAY: failed order for Order ID: " . $order->id);
                             wc_add_notice("Error in response from FuturePay. Try again later.");
