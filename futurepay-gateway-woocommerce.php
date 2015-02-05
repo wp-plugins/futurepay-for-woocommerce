@@ -3,7 +3,7 @@
  * Plugin Name: FuturePay for WooCommerce
  * Plugin URI: https://www.futurepay.com
  * Description: Allow payment processing via FuturePay Gateway
- * Version: 20150204
+ * Version: 1.1.0
  * Author: FuturePay
  * Depends: WooCommerce
  */
